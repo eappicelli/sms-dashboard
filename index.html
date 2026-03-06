@@ -14,6 +14,7 @@
       --muted: #6b7788;
       --shadow: 0 1px 3px rgba(0,0,0,0.08);
       --radius: 8px;
+      --header-bg: #f8fafc;
     }
 
     * { box-sizing: border-box; }
@@ -63,7 +64,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      min-width: 170px;
+      min-width: 160px;
     }
 
     .filter-group label {
@@ -72,13 +73,16 @@
       font-weight: 600;
     }
 
-    input[type="date"], button {
+    input[type="date"],
+    select,
+    button {
       height: 36px;
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0 10px;
       font-size: 14px;
       background: #fff;
+      color: var(--text);
     }
 
     button {
@@ -114,6 +118,7 @@
     .kpi-value {
       font-size: 28px;
       font-weight: 700;
+      line-height: 1.1;
     }
 
     .panel {
@@ -133,16 +138,31 @@
 
     .two-col {
       display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
+      grid-template-columns: 1.25fr 0.75fr;
       gap: 14px;
       margin-bottom: 14px;
     }
 
     .three-col {
       display: grid;
-      grid-template-columns: 1fr 1fr 1.2fr;
+      grid-template-columns: 0.9fr 1fr 1.2fr;
       gap: 14px;
       margin-bottom: 14px;
+    }
+
+    .chart-panel {
+      position: relative;
+      height: 320px;
+      padding-top: 8px;
+    }
+
+    .chart-panel.tall {
+      height: 360px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
     }
 
     table {
@@ -163,9 +183,10 @@
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: .03em;
-      background: #fafbfd;
+      background: var(--header-bg);
       position: sticky;
       top: 0;
+      z-index: 1;
     }
 
     .table-wrap {
@@ -173,6 +194,7 @@
       overflow: auto;
       border: 1px solid #edf1f5;
       border-radius: 6px;
+      background: #fff;
     }
 
     .body-cell {
@@ -197,12 +219,13 @@
       margin-bottom: 12px;
     }
 
-    canvas {
-      width: 100% !important;
-      height: 280px !important;
+    .small-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
     }
 
-    @media (max-width: 1100px) {
+    @media (max-width: 1200px) {
       .kpi-grid,
       .two-col,
       .three-col {
@@ -231,12 +254,22 @@
         <input id="endDate" type="date" />
       </div>
 
-      <div class="filter-group" style="min-width: auto;">
+      <div class="filter-group">
+        <label for="dateGrain">Date View</label>
+        <select id="dateGrain">
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+          <option value="year">Year</option>
+        </select>
+      </div>
+
+      <div class="filter-group" style="min-width:auto;">
         <label>&nbsp;</label>
         <button id="applyBtn">Apply Filter</button>
       </div>
 
-      <div class="filter-group" style="min-width: auto;">
+      <div class="filter-group" style="min-width:auto;">
         <label>&nbsp;</label>
         <button id="resetBtn">Reset</button>
       </div>
@@ -270,23 +303,42 @@
     <div class="two-col">
       <div class="panel">
         <h3>Delivery Rate by Date</h3>
-        <canvas id="deliveryChart"></canvas>
+        <div class="chart-panel tall">
+          <canvas id="deliveryChart"></canvas>
+        </div>
+        <div class="small-note">Includes dotted average line for the selected time period.</div>
       </div>
+
       <div class="panel">
         <h3>Message Funnel</h3>
-        <canvas id="funnelChart"></canvas>
+        <div class="chart-panel tall">
+          <canvas id="funnelChart"></canvas>
+        </div>
       </div>
     </div>
 
     <div class="three-col">
       <div class="panel">
-        <h3>Status Distribution</h3>
-        <canvas id="statusChart"></canvas>
+        <h3>Outbound Messages by Status</h3>
+        <div class="chart-panel">
+          <canvas id="statusChart"></canvas>
+        </div>
       </div>
 
       <div class="panel">
-        <h3>Failure Reasons</h3>
-        <canvas id="failureChart"></canvas>
+        <h3>Failed / Undelivered Messages by Reason</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Failure Reason</th>
+                <th>Count</th>
+                <th>% of Failed/Undelivered</th>
+              </tr>
+            </thead>
+            <tbody id="failureReasonsTable"></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="panel">
@@ -326,10 +378,10 @@
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbxYlG2hs2ArM7nvoX1kjkxQDhgU9IcNWrssRLjMkMwXtavr84ktiNWxyzjdZLEoPuMa/exec";
 
-    let funnelChart;
-    let statusChart;
-    let failureChart;
-    let deliveryChart;
+    let funnelChart = null;
+    let statusChart = null;
+    let deliveryChart = null;
+    let latestData = null;
 
     function escapeHtml(value) {
       return String(value)
@@ -375,72 +427,189 @@
       });
     }
 
-    function buildAllCharts(data) {
+    function groupDeliverySeries(series, grain) {
+      const grouped = {};
+
+      series.forEach(row => {
+        if (!row.date) return;
+
+        const date = new Date(row.date + "T00:00:00");
+        if (Number.isNaN(date.getTime())) return;
+
+        let key;
+
+        if (grain === "day") {
+          key = row.date;
+        } else if (grain === "week") {
+          const temp = new Date(date);
+          const day = temp.getDay();
+          const diff = temp.getDate() - day + (day === 0 ? -6 : 1);
+          temp.setDate(diff);
+          key = temp.toISOString().slice(0, 10);
+        } else if (grain === "month") {
+          key = row.date.slice(0, 7);
+        } else if (grain === "year") {
+          key = row.date.slice(0, 4);
+        } else {
+          key = row.date;
+        }
+
+        if (!grouped[key]) {
+          grouped[key] = { outbound: 0, delivered: 0 };
+        }
+
+        grouped[key].outbound += row.outbound || 0;
+        grouped[key].delivered += row.delivered || 0;
+      });
+
+      return Object.keys(grouped).sort().map(key => {
+        const item = grouped[key];
+        return {
+          label: key,
+          outbound: item.outbound,
+          delivered: item.delivered,
+          rate: item.outbound > 0 ? Number(((item.delivered / item.outbound) * 100).toFixed(1)) : 0
+        };
+      });
+    }
+
+    function buildDeliveryChart(series, grain) {
+      const grouped = groupDeliverySeries(series || [], grain);
+      const labels = grouped.map(x => x.label);
+      const rates = grouped.map(x => x.rate);
+      const avg = rates.length
+        ? Number((rates.reduce((a, b) => a + b, 0) / rates.length).toFixed(1))
+        : 0;
+
       deliveryChart = buildChart(deliveryChart, "deliveryChart", {
         type: "line",
         data: {
-          labels: (data.deliveryByDate || []).map(x => x.date),
-          datasets: [{
-            label: "Delivery Rate %",
-            data: (data.deliveryByDate || []).map(x => x.rate),
-            tension: 0.25
-          }]
+          labels,
+          datasets: [
+            {
+              label: "Delivery Rate %",
+              data: rates,
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2
+            },
+            {
+              label: "Average",
+              data: labels.map(() => avg),
+              borderDash: [6, 6],
+              borderWidth: 2,
+              pointRadius: 0
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          layout: {
+            padding: {
+              top: 18,
+              right: 12,
+              bottom: 8,
+              left: 8
+            }
+          },
+          plugins: {
+            legend: {
+              display: true
+            }
+          },
           scales: {
-            y: { min: 0, max: 100 }
+            y: {
+              min: 0,
+              max: 100,
+              ticks: {
+                callback: value => value + "%"
+              }
+            }
           }
         }
       });
+    }
 
+    function buildFunnelChart(data) {
       funnelChart = buildChart(funnelChart, "funnelChart", {
         type: "bar",
         data: {
           labels: ["Outbound", "Delivered", "Failed / Undelivered"],
           datasets: [{
+            label: "Messages",
             data: [data.outbound || 0, data.delivered || 0, data.failed || 0]
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } }
+          layout: {
+            padding: {
+              top: 18,
+              right: 12,
+              bottom: 8,
+              left: 8
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
         }
+      });
+    }
+
+    function buildStatusChart(statusCounts) {
+      const preferredOrder = ["Delivered", "Sent", "Failed", "Undelivered", "Received", "Other"];
+      const entries = Object.entries(statusCounts || {}).sort((a, b) => {
+        const ia = preferredOrder.indexOf(a[0]);
+        const ib = preferredOrder.indexOf(b[0]);
+        const aOrder = ia === -1 ? 999 : ia;
+        const bOrder = ib === -1 ? 999 : ib;
+        return aOrder - bOrder;
       });
 
       statusChart = buildChart(statusChart, "statusChart", {
         type: "bar",
         data: {
-          labels: Object.keys(data.statusCounts || {}),
+          labels: entries.map(x => x[0]),
           datasets: [{
-            data: Object.values(data.statusCounts || {})
+            label: "Messages",
+            data: entries.map(x => x[1])
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } }
+          layout: {
+            padding: {
+              top: 18,
+              right: 12,
+              bottom: 8,
+              left: 8
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
         }
       });
+    }
 
-      failureChart = buildChart(failureChart, "failureChart", {
-        type: "bar",
-        data: {
-          labels: Object.keys(data.failureReasons || {}),
-          datasets: [{
-            data: Object.values(data.failureReasons || {})
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } }
-        }
-      });
+    function renderFailureReasonsTable(failureReasons, failedTotal) {
+      const rows = Object.entries(failureReasons || {})
+        .map(([reason, count]) => ({
+          reason,
+          count,
+          pct: failedTotal > 0 ? ((count / failedTotal) * 100).toFixed(1) : "0.0"
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      renderTableRows("failureReasonsTable", rows, row => `
+        <td>${escapeHtml(row.reason)}</td>
+        <td>${row.count}</td>
+        <td>${row.pct}%</td>
+      `);
     }
 
     function renderTables(data) {
@@ -458,6 +627,10 @@
     }
 
     function renderDashboard(data) {
+      latestData = data;
+
+      const grain = document.getElementById("dateGrain").value || "day";
+
       setMetric("total", (data.total || 0).toLocaleString());
       setMetric("inbound", (data.inbound || 0).toLocaleString());
       setMetric("outbound", (data.outbound || 0).toLocaleString());
@@ -472,10 +645,14 @@
         document.getElementById("endDate").value = data.maxDate;
       }
 
-      buildAllCharts(data);
+      buildFunnelChart(data);
+      buildStatusChart(data.statusCounts || {});
+      buildDeliveryChart(data.deliveryByDate || [], grain);
+
+      renderFailureReasonsTable(data.failureReasons || {}, data.failed || 0);
       renderTables(data);
 
-      setStatus(`Showing ${data.total.toLocaleString()} messages`);
+      setStatus(`Showing ${(data.total || 0).toLocaleString()} messages`);
     }
 
     async function loadDashboard() {
@@ -491,8 +668,16 @@
         if (end) params.set("end", end);
 
         const url = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
+
         const res = await fetch(url);
-        const data = await res.json();
+        const text = await res.text();
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error(`API did not return JSON. First 200 chars: ${text.slice(0, 200)}`);
+        }
 
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to load dashboard.");
@@ -510,7 +695,14 @@
     document.getElementById("resetBtn").addEventListener("click", () => {
       document.getElementById("startDate").value = "";
       document.getElementById("endDate").value = "";
+      document.getElementById("dateGrain").value = "day";
       loadDashboard();
+    });
+
+    document.getElementById("dateGrain").addEventListener("change", () => {
+      if (!latestData) return;
+      const grain = document.getElementById("dateGrain").value || "day";
+      buildDeliveryChart(latestData.deliveryByDate || [], grain);
     });
 
     loadDashboard();
