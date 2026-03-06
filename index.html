@@ -15,6 +15,9 @@
       --shadow: 0 1px 3px rgba(0,0,0,0.08);
       --radius: 8px;
       --header-bg: #f8fafc;
+      --accent: #3b82f6;
+      --warn: #e67e22;
+      --warn-dark: #d35400;
     }
 
     * { box-sizing: border-box; }
@@ -57,7 +60,7 @@
       align-items: end;
       flex-wrap: wrap;
       box-shadow: var(--shadow);
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .filter-group {
@@ -88,6 +91,37 @@
     button {
       cursor: pointer;
       font-weight: 600;
+    }
+
+    .active-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      min-height: 28px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #e8f0fe;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .chip button {
+      height: auto;
+      border: none;
+      background: transparent;
+      padding: 0;
+      color: inherit;
+      font-size: 14px;
+      line-height: 1;
     }
 
     .kpi-grid {
@@ -204,6 +238,14 @@
       word-break: break-word;
     }
 
+    .clickable-row {
+      cursor: pointer;
+    }
+
+    .clickable-row:hover {
+      background: #f7fbff;
+    }
+
     .status-line {
       font-size: 12px;
       color: var(--muted);
@@ -274,7 +316,14 @@
         <label>&nbsp;</label>
         <button id="resetBtn">Reset</button>
       </div>
+
+      <div class="filter-group" style="min-width:auto;">
+        <label>&nbsp;</label>
+        <button id="clearVizFiltersBtn">Clear Viz Filters</button>
+      </div>
     </div>
+
+    <div id="activeFilters" class="active-filters"></div>
 
     <div class="status-line" id="statusLine">Loading dashboard...</div>
 
@@ -314,7 +363,7 @@
         <div class="chart-panel tall">
           <canvas id="deliveryChart"></canvas>
         </div>
-        <div class="small-note">Includes dotted average line for the selected time period.</div>
+        <div class="small-note">Includes dotted average line for the selected time period. Click a point to filter that date bucket.</div>
       </div>
     </div>
 
@@ -340,6 +389,7 @@
         <div class="chart-panel tall">
           <canvas id="failedCountsChart"></canvas>
         </div>
+        <div class="small-note">Click a bar or line point to filter that date bucket.</div>
       </div>
     </div>
 
@@ -366,6 +416,11 @@
     let deliveryChart = null;
     let failedCountsChart = null;
     let latestData = null;
+
+    const activeVizFilters = {
+      dateBucket: null,
+      failureReason: null
+    };
 
     function escapeHtml(value) {
       return String(value)
@@ -411,6 +466,44 @@
       });
     }
 
+    function renderActiveFilterChips() {
+      const container = document.getElementById("activeFilters");
+      const chips = [];
+
+      if (activeVizFilters.dateBucket) {
+        chips.push(`
+          <div class="chip">
+            Date bucket: ${escapeHtml(activeVizFilters.dateBucket)}
+            <button onclick="clearOneVizFilter('dateBucket')" aria-label="Clear date bucket">×</button>
+          </div>
+        `);
+      }
+
+      if (activeVizFilters.failureReason) {
+        chips.push(`
+          <div class="chip">
+            Failure reason: ${escapeHtml(activeVizFilters.failureReason)}
+            <button onclick="clearOneVizFilter('failureReason')" aria-label="Clear failure reason">×</button>
+          </div>
+        `);
+      }
+
+      container.innerHTML = chips.join("");
+    }
+
+    function clearOneVizFilter(key) {
+      activeVizFilters[key] = null;
+      renderActiveFilterChips();
+      loadDashboard();
+    }
+
+    function clearVizFilters() {
+      activeVizFilters.dateBucket = null;
+      activeVizFilters.failureReason = null;
+      renderActiveFilterChips();
+      loadDashboard();
+    }
+
     function weekStartLabel(dateStr) {
       const date = new Date(dateStr + "T00:00:00");
       const temp = new Date(date);
@@ -424,18 +517,21 @@
       return `${y}-${m}-${d}`;
     }
 
+    function getDateBucket(dateStr, grain) {
+      if (grain === "day") return dateStr;
+      if (grain === "week") return weekStartLabel(dateStr);
+      if (grain === "month") return dateStr.slice(0, 7);
+      if (grain === "year") return dateStr.slice(0, 4);
+      return dateStr;
+    }
+
     function groupDeliverySeries(series, grain) {
       const grouped = {};
 
       series.forEach(row => {
         if (!row.date) return;
 
-        let key;
-        if (grain === "day") key = row.date;
-        else if (grain === "week") key = weekStartLabel(row.date);
-        else if (grain === "month") key = row.date.slice(0, 7);
-        else if (grain === "year") key = row.date.slice(0, 4);
-        else key = row.date;
+        const key = getDateBucket(row.date, grain);
 
         if (!grouped[key]) {
           grouped[key] = {
@@ -447,7 +543,12 @@
 
         grouped[key].outbound += Number(row.outbound || 0);
         grouped[key].delivered += Number(row.delivered || 0);
-        grouped[key].failedUndeliveredDistinct += Number(row.failedUndeliveredDistinct || 0);
+
+        const fallbackFailed =
+          row.failedUndeliveredDistinct ??
+          Math.max((row.outbound || 0) - (row.delivered || 0), 0);
+
+        grouped[key].failedUndeliveredDistinct += Number(fallbackFailed || 0);
       });
 
       return Object.keys(grouped).sort().map(key => {
@@ -492,6 +593,14 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          onClick: (event, elements) => {
+            if (!elements.length) return;
+            const index = elements[0].index;
+            const label = labels[index];
+            activeVizFilters.dateBucket = label;
+            renderActiveFilterChips();
+            loadDashboard();
+          },
           layout: {
             padding: {
               top: 18,
@@ -549,6 +658,14 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          onClick: (event, elements) => {
+            if (!elements.length) return;
+            const index = elements[0].index;
+            const label = labels[index];
+            activeVizFilters.dateBucket = label;
+            renderActiveFilterChips();
+            loadDashboard();
+          },
           layout: {
             padding: {
               top: 18,
@@ -630,10 +747,18 @@
         .sort((a, b) => b.count - a.count);
 
       renderTableRows("failureReasonsTable", rows, row => `
-        <td>${escapeHtml(row.reason)}</td>
-        <td>${row.count}</td>
-        <td>${row.pct}%</td>
+        <tr class="clickable-row" onclick="applyFailureReasonFilter('${escapeHtml(row.reason)}')">
+          <td>${escapeHtml(row.reason)}</td>
+          <td>${row.count}</td>
+          <td>${row.pct}%</td>
+        </tr>
       `);
+    }
+
+    function applyFailureReasonFilter(reason) {
+      activeVizFilters.failureReason = reason;
+      renderActiveFilterChips();
+      loadDashboard();
     }
 
     function renderFailedMessagesTable(data) {
@@ -668,6 +793,7 @@
 
       renderFailureReasonsTable(data.failureReasons || {}, data.failed || 0);
       renderFailedMessagesTable(data);
+      renderActiveFilterChips();
 
       setStatus(`Showing ${(data.total || 0).toLocaleString()} messages`);
     }
@@ -679,10 +805,21 @@
       try {
         const start = document.getElementById("startDate").value;
         const end = document.getElementById("endDate").value;
+        const grain = document.getElementById("dateGrain").value || "day";
 
         const params = new URLSearchParams();
         if (start) params.set("start", start);
         if (end) params.set("end", end);
+
+        // These extra params require Apps Script support to fully work.
+        if (activeVizFilters.dateBucket) {
+          params.set("vizDateBucket", activeVizFilters.dateBucket);
+          params.set("vizDateGrain", grain);
+        }
+
+        if (activeVizFilters.failureReason) {
+          params.set("vizFailureReason", activeVizFilters.failureReason);
+        }
 
         const url = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
 
@@ -713,8 +850,10 @@
       document.getElementById("startDate").value = "";
       document.getElementById("endDate").value = "";
       document.getElementById("dateGrain").value = "day";
-      loadDashboard();
+      clearVizFilters();
     });
+
+    document.getElementById("clearVizFiltersBtn").addEventListener("click", clearVizFilters);
 
     document.getElementById("dateGrain").addEventListener("change", () => {
       if (!latestData) return;
