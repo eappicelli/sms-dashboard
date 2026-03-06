@@ -3,382 +3,333 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SMS Campaign Dashboard</title>
+  <title>SMS Campaign Executive Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg: #f4f6fb;
-      --card: #ffffff;
-      --text: #1f2937;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-      --radius: 14px;
+      --bg: #eef1f5;
+      --panel: #ffffff;
+      --border: #d9dee7;
+      --text: #233142;
+      --muted: #6b7788;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+      --radius: 8px;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      padding: 32px;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
+      font-family: Arial, Helvetica, sans-serif;
       color: var(--text);
+      padding: 18px;
     }
 
-    h1 {
-      margin: 0 0 24px 0;
-      font-size: 28px;
+    .dashboard {
+      max-width: 1500px;
+      margin: 0 auto;
     }
 
-    h3 {
-      margin-top: 0;
-      margin-bottom: 16px;
-      font-size: 18px;
+    .title-bar {
+      margin-bottom: 12px;
     }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 18px;
-      margin-bottom: 24px;
+    .title-bar h1 {
+      font-size: 24px;
+      margin: 0 0 4px 0;
+      font-weight: 600;
     }
 
-    .card, .section {
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-    }
-
-    .card {
-      padding: 20px;
-      text-align: center;
-    }
-
-    .label {
+    .subtitle {
       color: var(--muted);
-      font-size: 14px;
-      margin-bottom: 6px;
+      font-size: 13px;
     }
 
-    .metric {
-      font-size: 30px;
+    .filters {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 170px;
+    }
+
+    .filter-group label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    input[type="date"], button {
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 10px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .kpi-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      min-height: 84px;
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .kpi-value {
+      font-size: 28px;
       font-weight: 700;
     }
 
-    .section {
-      padding: 20px;
-      margin-bottom: 24px;
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .panel h3 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      font-weight: 700;
     }
 
     .two-col {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+      margin-bottom: 14px;
     }
 
-    .table-wrap {
-      overflow-x: auto;
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr;
+      gap: 14px;
+      margin-bottom: 14px;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     th, td {
       text-align: left;
-      padding: 12px 10px;
-      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      border-bottom: 1px solid #edf1f5;
       vertical-align: top;
     }
 
     th {
+      font-size: 12px;
       color: var(--muted);
-      font-weight: 600;
-      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      background: #fafbfd;
+      position: sticky;
+      top: 0;
+    }
+
+    .table-wrap {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid #edf1f5;
+      border-radius: 6px;
     }
 
     .body-cell {
-      max-width: 600px;
-      word-break: break-word;
+      max-width: 520px;
       white-space: normal;
+      word-break: break-word;
+    }
+
+    .status-line {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
     }
 
     .error {
-      background: #fff1f2;
-      color: #9f1239;
-      padding: 14px 16px;
-      border-radius: 10px;
-      margin-bottom: 20px;
       display: none;
+      background: #fff0f1;
+      color: #9f1239;
+      border: 1px solid #fecdd3;
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
     }
 
-    .loading {
-      color: var(--muted);
-      margin-bottom: 20px;
+    canvas {
+      width: 100% !important;
+      height: 280px !important;
     }
 
     @media (max-width: 1100px) {
-      .grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-      .two-col {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 700px) {
-      body {
-        padding: 18px;
-      }
-      .grid {
+      .kpi-grid,
+      .two-col,
+      .three-col {
         grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
-  <h1>SMS Campaign Dashboard</h1>
-
-  <div id="loading" class="loading">Loading dashboard...</div>
-  <div id="error" class="error"></div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="label">Total Messages</div>
-      <div id="total" class="metric">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Inbound</div>
-      <div id="inbound" class="metric">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Outbound</div>
-      <div id="outbound" class="metric">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Delivered</div>
-      <div id="delivered" class="metric">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Delivery Rate</div>
-      <div id="rate" class="metric">—</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h3>Message Funnel</h3>
-    <canvas id="funnelChart"></canvas>
-  </div>
-
-  <div class="two-col">
-    <div class="section">
-      <h3>Status Distribution</h3>
-      <canvas id="statusChart"></canvas>
+  <div class="dashboard">
+    <div class="title-bar">
+      <h1>SMS Campaign Executive Dashboard</h1>
+      <div class="subtitle">Sanitized live view from Google Sheets</div>
     </div>
 
-    <div class="section">
-      <h3>Failure Reasons</h3>
-      <canvas id="failureChart"></canvas>
+    <div id="error" class="error"></div>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label for="startDate">Start Date</label>
+        <input id="startDate" type="date" />
+      </div>
+
+      <div class="filter-group">
+        <label for="endDate">End Date</label>
+        <input id="endDate" type="date" />
+      </div>
+
+      <div class="filter-group" style="min-width: auto;">
+        <label>&nbsp;</label>
+        <button id="applyBtn">Apply Filter</button>
+      </div>
+
+      <div class="filter-group" style="min-width: auto;">
+        <label>&nbsp;</label>
+        <button id="resetBtn">Reset</button>
+      </div>
     </div>
-  </div>
 
-  <div class="section">
-    <h3>Delivery Rate by Date</h3>
-    <canvas id="deliveryChart"></canvas>
-  </div>
+    <div class="status-line" id="statusLine">Loading dashboard...</div>
 
-  <div class="section">
-    <h3>Top Performing Message Templates</h3>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Message Body</th>
-            <th>Outbound</th>
-            <th>Delivered</th>
-            <th>Delivery Rate</th>
-          </tr>
-        </thead>
-        <tbody id="templatesTable"></tbody>
-      </table>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Messages</div>
+        <div id="total" class="kpi-value">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Inbound</div>
+        <div id="inbound" class="kpi-value">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Outbound</div>
+        <div id="outbound" class="kpi-value">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Delivered</div>
+        <div id="delivered" class="kpi-value">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Delivery Rate</div>
+        <div id="rate" class="kpi-value">—</div>
+      </div>
     </div>
-  </div>
 
-  <div class="section">
-    <h3>Failed / Undelivered Message Bodies</h3>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Message Body</th>
-            <th>Count</th>
-          </tr>
-        </thead>
-        <tbody id="failedMessagesTable"></tbody>
-      </table>
+    <div class="two-col">
+      <div class="panel">
+        <h3>Delivery Rate by Date</h3>
+        <canvas id="deliveryChart"></canvas>
+      </div>
+      <div class="panel">
+        <h3>Message Funnel</h3>
+        <canvas id="funnelChart"></canvas>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <div class="panel">
+        <h3>Status Distribution</h3>
+        <canvas id="statusChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <h3>Failure Reasons</h3>
+        <canvas id="failureChart"></canvas>
+      </div>
+
+      <div class="panel">
+        <h3>Top Performing Message Templates</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Message Body</th>
+                <th>Outbound</th>
+                <th>Delivered</th>
+                <th>Rate</th>
+              </tr>
+            </thead>
+            <tbody id="templatesTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Failed / Undelivered Message Bodies</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Message Body</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody id="failedMessagesTable"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbxAqSCSvjTl1PuUMOVSDg5YhYWhNBi5fORWsMtTvsaP5F-VAdg50Cz-t554sgC5gWY/exec";
+    const API_URL = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
 
     let funnelChart;
     let statusChart;
     let failureChart;
     let deliveryChart;
-
-    function showError(message) {
-      const errorBox = document.getElementById("error");
-      errorBox.style.display = "block";
-      errorBox.textContent = message;
-    }
-
-    function hideLoading() {
-      document.getElementById("loading").style.display = "none";
-    }
-
-    function setMetric(id, value) {
-      document.getElementById(id).textContent = value;
-    }
-
-    function renderTableRows(tbodyId, rows, renderRow) {
-      const tbody = document.getElementById(tbodyId);
-      tbody.innerHTML = "";
-
-      rows.forEach(row => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = renderRow(row);
-        tbody.appendChild(tr);
-      });
-    }
-
-    function buildFunnelChart(data) {
-      if (funnelChart) funnelChart.destroy();
-
-      funnelChart = new Chart(document.getElementById("funnelChart"), {
-        type: "bar",
-        data: {
-          labels: ["Outbound", "Delivered", "Failed / Undelivered"],
-          datasets: [{
-            label: "Messages",
-            data: [data.outbound, data.delivered, data.failed]
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: false }
-          }
-        }
-      });
-    }
-
-    function buildStatusChart(statusCounts) {
-      if (statusChart) statusChart.destroy();
-
-      statusChart = new Chart(document.getElementById("statusChart"), {
-        type: "bar",
-        data: {
-          labels: Object.keys(statusCounts),
-          datasets: [{
-            label: "Messages",
-            data: Object.values(statusCounts)
-          }]
-        },
-        options: {
-          responsive: true
-        }
-      });
-    }
-
-    function buildFailureChart(failureReasons) {
-      if (failureChart) failureChart.destroy();
-
-      const labels = Object.keys(failureReasons);
-      const values = Object.values(failureReasons);
-
-      failureChart = new Chart(document.getElementById("failureChart"), {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Failures",
-            data: values
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true
-        }
-      });
-    }
-
-    function buildDeliveryChart(series) {
-      if (deliveryChart) deliveryChart.destroy();
-
-      deliveryChart = new Chart(document.getElementById("deliveryChart"), {
-        type: "line",
-        data: {
-          labels: series.map(x => x.date),
-          datasets: [{
-            label: "Delivery Rate %",
-            data: series.map(x => x.rate),
-            tension: 0.2
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: {
-              suggestedMin: 0,
-              suggestedMax: 100
-            }
-          }
-        }
-      });
-    }
-
-    async function loadDashboard() {
-      try {
-        const res = await fetch(API_URL);
-        const data = await res.json();
-
-        if (!res.ok || data.error) {
-          throw new Error(data.error || "Failed to load dashboard data.");
-        }
-
-        setMetric("total", data.total.toLocaleString());
-        setMetric("inbound", data.inbound.toLocaleString());
-        setMetric("outbound", data.outbound.toLocaleString());
-        setMetric("delivered", data.delivered.toLocaleString());
-        setMetric("rate", `${data.deliveryRate}%`);
-
-        buildFunnelChart(data);
-        buildStatusChart(data.statusCounts || {});
-        buildFailureChart(data.failureReasons || {});
-        buildDeliveryChart(data.deliveryByDate || []);
-
-        renderTableRows("templatesTable", data.topTemplates || [], row => `
-          <td class="body-cell">${escapeHtml(row.body)}</td>
-          <td>${row.outbound}</td>
-          <td>${row.delivered}</td>
-          <td>${row.deliveryRate}%</td>
-        `);
-
-        renderTableRows("failedMessagesTable", data.failedMessages || [], row => `
-          <td class="body-cell">${escapeHtml(row.body)}</td>
-          <td>${row.count}</td>
-        `);
-
-        hideLoading();
-      } catch (err) {
-        hideLoading();
-        showError(err.message || "Something went wrong.");
-      }
-    }
 
     function escapeHtml(value) {
       return String(value)
@@ -388,6 +339,179 @@
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
     }
+
+    function setMetric(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function showError(message) {
+      const box = document.getElementById("error");
+      box.style.display = "block";
+      box.textContent = message;
+    }
+
+    function clearError() {
+      const box = document.getElementById("error");
+      box.style.display = "none";
+      box.textContent = "";
+    }
+
+    function setStatus(text) {
+      document.getElementById("statusLine").textContent = text;
+    }
+
+    function buildChart(existingChart, canvasId, config) {
+      if (existingChart) existingChart.destroy();
+      return new Chart(document.getElementById(canvasId), config);
+    }
+
+    function renderTableRows(tbodyId, rows, rowRenderer) {
+      const tbody = document.getElementById(tbodyId);
+      tbody.innerHTML = "";
+      rows.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = rowRenderer(row);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function buildAllCharts(data) {
+      deliveryChart = buildChart(deliveryChart, "deliveryChart", {
+        type: "line",
+        data: {
+          labels: (data.deliveryByDate || []).map(x => x.date),
+          datasets: [{
+            label: "Delivery Rate %",
+            data: (data.deliveryByDate || []).map(x => x.rate),
+            tension: 0.25
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { min: 0, max: 100 }
+          }
+        }
+      });
+
+      funnelChart = buildChart(funnelChart, "funnelChart", {
+        type: "bar",
+        data: {
+          labels: ["Outbound", "Delivered", "Failed / Undelivered"],
+          datasets: [{
+            data: [data.outbound || 0, data.delivered || 0, data.failed || 0]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      statusChart = buildChart(statusChart, "statusChart", {
+        type: "bar",
+        data: {
+          labels: Object.keys(data.statusCounts || {}),
+          datasets: [{
+            data: Object.values(data.statusCounts || {})
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      failureChart = buildChart(failureChart, "failureChart", {
+        type: "bar",
+        data: {
+          labels: Object.keys(data.failureReasons || {}),
+          datasets: [{
+            data: Object.values(data.failureReasons || {})
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function renderTables(data) {
+      renderTableRows("templatesTable", data.topTemplates || [], row => `
+        <td class="body-cell">${escapeHtml(row.body)}</td>
+        <td>${row.outbound}</td>
+        <td>${row.delivered}</td>
+        <td>${row.deliveryRate}%</td>
+      `);
+
+      renderTableRows("failedMessagesTable", data.failedMessages || [], row => `
+        <td class="body-cell">${escapeHtml(row.body)}</td>
+        <td>${row.count}</td>
+      `);
+    }
+
+    function renderDashboard(data) {
+      setMetric("total", (data.total || 0).toLocaleString());
+      setMetric("inbound", (data.inbound || 0).toLocaleString());
+      setMetric("outbound", (data.outbound || 0).toLocaleString());
+      setMetric("delivered", (data.delivered || 0).toLocaleString());
+      setMetric("rate", `${data.deliveryRate || 0}%`);
+
+      if (data.minDate && !document.getElementById("startDate").value) {
+        document.getElementById("startDate").value = data.minDate;
+      }
+
+      if (data.maxDate && !document.getElementById("endDate").value) {
+        document.getElementById("endDate").value = data.maxDate;
+      }
+
+      buildAllCharts(data);
+      renderTables(data);
+
+      setStatus(`Showing ${data.total.toLocaleString()} messages`);
+    }
+
+    async function loadDashboard() {
+      clearError();
+      setStatus("Loading dashboard...");
+
+      try {
+        const start = document.getElementById("startDate").value;
+        const end = document.getElementById("endDate").value;
+
+        const params = new URLSearchParams();
+        if (start) params.set("start", start);
+        if (end) params.set("end", end);
+
+        const url = params.toString() ? `${API_URL}?${params.toString()}` : API_URL;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          throw new Error(data.error || "Failed to load dashboard.");
+        }
+
+        renderDashboard(data);
+      } catch (err) {
+        showError(err.message || "Something went wrong.");
+        setStatus("Load failed");
+      }
+    }
+
+    document.getElementById("applyBtn").addEventListener("click", loadDashboard);
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      loadDashboard();
+    });
 
     loadDashboard();
   </script>
