@@ -138,16 +138,17 @@
 
     .two-col {
       display: grid;
-      grid-template-columns: 1.25fr 0.75fr;
+      grid-template-columns: 0.75fr 1.25fr;
       gap: 14px;
       margin-bottom: 14px;
     }
 
-    .three-col {
+    .bottom-two-col {
       display: grid;
-      grid-template-columns: 0.9fr 1fr 1.2fr;
+      grid-template-columns: 0.9fr 1.1fr;
       gap: 14px;
       margin-bottom: 14px;
+      align-items: start;
     }
 
     .chart-panel {
@@ -228,7 +229,7 @@
     @media (max-width: 1200px) {
       .kpi-grid,
       .two-col,
-      .three-col {
+      .bottom-two-col {
         grid-template-columns: 1fr;
       }
     }
@@ -302,29 +303,22 @@
 
     <div class="two-col">
       <div class="panel">
+        <h3>Message Funnel</h3>
+        <div class="chart-panel tall">
+          <canvas id="funnelChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>Delivery Rate by Date</h3>
         <div class="chart-panel tall">
           <canvas id="deliveryChart"></canvas>
         </div>
         <div class="small-note">Includes dotted average line for the selected time period.</div>
       </div>
-
-      <div class="panel">
-        <h3>Message Funnel</h3>
-        <div class="chart-panel tall">
-          <canvas id="funnelChart"></canvas>
-        </div>
-      </div>
     </div>
 
-    <div class="three-col">
-      <div class="panel">
-        <h3>Outbound Messages by Status</h3>
-        <div class="chart-panel">
-          <canvas id="statusChart"></canvas>
-        </div>
-      </div>
-
+    <div class="bottom-two-col">
       <div class="panel">
         <h3>Failed / Undelivered Messages by Reason</h3>
         <div class="table-wrap">
@@ -342,19 +336,9 @@
       </div>
 
       <div class="panel">
-        <h3>Top Performing Message Templates</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Message Body</th>
-                <th>Outbound</th>
-                <th>Delivered</th>
-                <th>Rate</th>
-              </tr>
-            </thead>
-            <tbody id="templatesTable"></tbody>
-          </table>
+        <h3>Failed / Undelivered Message Counts by Date</h3>
+        <div class="chart-panel tall">
+          <canvas id="failedCountsChart"></canvas>
         </div>
       </div>
     </div>
@@ -379,8 +363,8 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbxYlG2hs2ArM7nvoX1kjkxQDhgU9IcNWrssRLjMkMwXtavr84ktiNWxyzjdZLEoPuMa/exec";
 
     let funnelChart = null;
-    let statusChart = null;
     let deliveryChart = null;
+    let failedCountsChart = null;
     let latestData = null;
 
     function escapeHtml(value) {
@@ -427,39 +411,43 @@
       });
     }
 
+    function weekStartLabel(dateStr) {
+      const date = new Date(dateStr + "T00:00:00");
+      const temp = new Date(date);
+      const day = temp.getDay();
+      const diff = temp.getDate() - day + (day === 0 ? -6 : 1);
+      temp.setDate(diff);
+
+      const y = temp.getFullYear();
+      const m = String(temp.getMonth() + 1).padStart(2, "0");
+      const d = String(temp.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
     function groupDeliverySeries(series, grain) {
       const grouped = {};
 
       series.forEach(row => {
         if (!row.date) return;
 
-        const date = new Date(row.date + "T00:00:00");
-        if (Number.isNaN(date.getTime())) return;
-
         let key;
-
-        if (grain === "day") {
-          key = row.date;
-        } else if (grain === "week") {
-          const temp = new Date(date);
-          const day = temp.getDay();
-          const diff = temp.getDate() - day + (day === 0 ? -6 : 1);
-          temp.setDate(diff);
-          key = temp.toISOString().slice(0, 10);
-        } else if (grain === "month") {
-          key = row.date.slice(0, 7);
-        } else if (grain === "year") {
-          key = row.date.slice(0, 4);
-        } else {
-          key = row.date;
-        }
+        if (grain === "day") key = row.date;
+        else if (grain === "week") key = weekStartLabel(row.date);
+        else if (grain === "month") key = row.date.slice(0, 7);
+        else if (grain === "year") key = row.date.slice(0, 4);
+        else key = row.date;
 
         if (!grouped[key]) {
-          grouped[key] = { outbound: 0, delivered: 0 };
+          grouped[key] = {
+            outbound: 0,
+            delivered: 0,
+            failedUndeliveredDistinct: 0
+          };
         }
 
-        grouped[key].outbound += row.outbound || 0;
-        grouped[key].delivered += row.delivered || 0;
+        grouped[key].outbound += Number(row.outbound || 0);
+        grouped[key].delivered += Number(row.delivered || 0);
+        grouped[key].failedUndeliveredDistinct += Number(row.failedUndeliveredDistinct || 0);
       });
 
       return Object.keys(grouped).sort().map(key => {
@@ -468,6 +456,7 @@
           label: key,
           outbound: item.outbound,
           delivered: item.delivered,
+          failedUndeliveredDistinct: item.failedUndeliveredDistinct,
           rate: item.outbound > 0 ? Number(((item.delivered / item.outbound) * 100).toFixed(1)) : 0
         };
       });
@@ -487,14 +476,12 @@
           labels,
           datasets: [
             {
-              label: "Delivery Rate %",
               data: rates,
               tension: 0.25,
               borderWidth: 2,
               pointRadius: 2
             },
             {
-              label: "Average",
               data: labels.map(() => avg),
               borderDash: [6, 6],
               borderWidth: 2,
@@ -515,7 +502,7 @@
           },
           plugins: {
             legend: {
-              display: true
+              display: false
             }
           },
           scales: {
@@ -531,15 +518,33 @@
       });
     }
 
-    function buildFunnelChart(data) {
-      funnelChart = buildChart(funnelChart, "funnelChart", {
-        type: "bar",
+    function buildFailedCountsChart(series, grain) {
+      const grouped = groupDeliverySeries(series || [], grain);
+      const labels = grouped.map(x => x.label);
+      const failedCounts = grouped.map(x => x.failedUndeliveredDistinct);
+      const rates = grouped.map(x => x.rate);
+
+      failedCountsChart = buildChart(failedCountsChart, "failedCountsChart", {
         data: {
-          labels: ["Outbound", "Delivered", "Failed / Undelivered"],
-          datasets: [{
-            label: "Messages",
-            data: [data.outbound || 0, data.delivered || 0, data.failed || 0]
-          }]
+          labels,
+          datasets: [
+            {
+              type: "bar",
+              data: failedCounts,
+              yAxisID: "yCounts",
+              backgroundColor: "#e67e22",
+              borderColor: "#d35400",
+              borderWidth: 1
+            },
+            {
+              type: "line",
+              data: rates,
+              yAxisID: "yRate",
+              tension: 0.25,
+              borderWidth: 2,
+              pointRadius: 2
+            }
+          ]
         },
         options: {
           responsive: true,
@@ -553,29 +558,48 @@
             }
           },
           plugins: {
-            legend: { display: false }
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            yCounts: {
+              type: "linear",
+              position: "left",
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Failed / Undelivered Count"
+              }
+            },
+            yRate: {
+              type: "linear",
+              position: "right",
+              min: 0,
+              max: 100,
+              grid: {
+                drawOnChartArea: false
+              },
+              ticks: {
+                callback: value => value + "%"
+              },
+              title: {
+                display: true,
+                text: "Delivery Rate %"
+              }
+            }
           }
         }
       });
     }
 
-    function buildStatusChart(statusCounts) {
-      const preferredOrder = ["Delivered", "Sent", "Failed", "Undelivered", "Received", "Other"];
-      const entries = Object.entries(statusCounts || {}).sort((a, b) => {
-        const ia = preferredOrder.indexOf(a[0]);
-        const ib = preferredOrder.indexOf(b[0]);
-        const aOrder = ia === -1 ? 999 : ia;
-        const bOrder = ib === -1 ? 999 : ib;
-        return aOrder - bOrder;
-      });
-
-      statusChart = buildChart(statusChart, "statusChart", {
+    function buildFunnelChart(data) {
+      funnelChart = buildChart(funnelChart, "funnelChart", {
         type: "bar",
         data: {
-          labels: entries.map(x => x[0]),
+          labels: ["Outbound", "Delivered", "Failed / Undelivered"],
           datasets: [{
-            label: "Messages",
-            data: entries.map(x => x[1])
+            data: [data.outbound || 0, data.delivered || 0, data.failed || 0]
           }]
         },
         options: {
@@ -612,14 +636,7 @@
       `);
     }
 
-    function renderTables(data) {
-      renderTableRows("templatesTable", data.topTemplates || [], row => `
-        <td class="body-cell">${escapeHtml(row.body)}</td>
-        <td>${row.outbound}</td>
-        <td>${row.delivered}</td>
-        <td>${row.deliveryRate}%</td>
-      `);
-
+    function renderFailedMessagesTable(data) {
       renderTableRows("failedMessagesTable", data.failedMessages || [], row => `
         <td class="body-cell">${escapeHtml(row.body)}</td>
         <td>${row.count}</td>
@@ -646,11 +663,11 @@
       }
 
       buildFunnelChart(data);
-      buildStatusChart(data.statusCounts || {});
       buildDeliveryChart(data.deliveryByDate || [], grain);
+      buildFailedCountsChart(data.deliveryByDate || [], grain);
 
       renderFailureReasonsTable(data.failureReasons || {}, data.failed || 0);
-      renderTables(data);
+      renderFailedMessagesTable(data);
 
       setStatus(`Showing ${(data.total || 0).toLocaleString()} messages`);
     }
@@ -703,6 +720,7 @@
       if (!latestData) return;
       const grain = document.getElementById("dateGrain").value || "day";
       buildDeliveryChart(latestData.deliveryByDate || [], grain);
+      buildFailedCountsChart(latestData.deliveryByDate || [], grain);
     });
 
     loadDashboard();
